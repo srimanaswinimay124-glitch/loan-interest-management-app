@@ -1,0 +1,206 @@
+import 'dart:async';
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+import '../models/contact.dart';
+import '../models/transaction.dart';
+import '../models/payment.dart';
+
+class DatabaseService {
+  static final DatabaseService _instance = DatabaseService._internal();
+  factory DatabaseService() => _instance;
+  DatabaseService._internal();
+
+  static Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    String path = join(await getDatabasesPath(), 'smart_interest_x.db');
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: _createTables,
+    );
+  }
+
+  Future<void> _createTables(Database db, int version) async {
+    // Contacts table
+    await db.execute('''
+      CREATE TABLE contacts(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phoneNumber TEXT NOT NULL,
+        email TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    // Transactions table
+    await db.execute('''
+      CREATE TABLE transactions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contactId INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        type INTEGER NOT NULL,
+        interestRate REAL NOT NULL,
+        interestType INTEGER NOT NULL,
+        startDate TEXT NOT NULL,
+        dueDate TEXT,
+        notes TEXT,
+        status INTEGER DEFAULT 0,
+        paidAmount REAL DEFAULT 0.0,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY(contactId) REFERENCES contacts(id)
+      )
+    ''');
+
+    // Payments table
+    await db.execute('''
+      CREATE TABLE payments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transactionId INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        paymentDate TEXT NOT NULL,
+        mode INTEGER NOT NULL,
+        proofImagePath TEXT,
+        notes TEXT,
+        createdAt TEXT NOT NULL,
+        FOREIGN KEY(transactionId) REFERENCES transactions(id)
+      )
+    ''');
+  }
+
+  // Contact CRUD operations
+  Future<int> insertContact(Contact contact) async {
+    final db = await database;
+    return await db.insert('contacts', contact.toMap());
+  }
+
+  Future<List<Contact>> getContacts() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('contacts');
+    return List.generate(maps.length, (i) => Contact.fromMap(maps[i]));
+  }
+
+  Future<Contact?> getContactById(int id) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (maps.isNotEmpty) {
+      return Contact.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> updateContact(Contact contact) async {
+    final db = await database;
+    return await db.update(
+      'contacts',
+      contact.toMap(),
+      where: 'id = ?',
+      whereArgs: [contact.id],
+    );
+  }
+
+  Future<int> deleteContact(int id) async {
+    final db = await database;
+    return await db.delete(
+      'contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Transaction CRUD operations
+  Future<int> insertTransaction(Transaction transaction) async {
+    final db = await database;
+    return await db.insert('transactions', transaction.toMap());
+  }
+
+  Future<List<Transaction>> getTransactions() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('transactions');
+    return List.generate(maps.length, (i) => Transaction.fromMap(maps[i]));
+  }
+
+  Future<List<Transaction>> getTransactionsByContactId(int contactId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'transactions',
+      where: 'contactId = ?',
+      whereArgs: [contactId],
+    );
+    return List.generate(maps.length, (i) => Transaction.fromMap(maps[i]));
+  }
+
+  Future<int> updateTransaction(Transaction transaction) async {
+    final db = await database;
+    return await db.update(
+      'transactions',
+      transaction.toMap(),
+      where: 'id = ?',
+      whereArgs: [transaction.id],
+    );
+  }
+
+  Future<int> deleteTransaction(int id) async {
+    final db = await database;
+    return await db.delete(
+      'transactions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Payment CRUD operations
+  Future<int> insertPayment(Payment payment) async {
+    final db = await database;
+    return await db.insert('payments', payment.toMap());
+  }
+
+  Future<List<Payment>> getPaymentsByTransactionId(int transactionId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'payments',
+      where: 'transactionId = ?',
+      whereArgs: [transactionId],
+    );
+    return List.generate(maps.length, (i) => Payment.fromMap(maps[i]));
+  }
+
+  // Analytics queries
+  Future<Map<String, double>> getAnalytics() async {
+    final transactions = await getTransactions();
+    double totalInterestEarned = 0;
+    double totalInterestPaid = 0;
+    double totalReceivables = 0;
+    double totalPayables = 0;
+
+    for (final transaction in transactions) {
+      final interest = transaction.calculateSimpleInterest();
+      if (transaction.type == TransactionType.given) {
+        totalInterestEarned += interest;
+        totalReceivables += transaction.outstandingAmount;
+      } else {
+        totalInterestPaid += interest;
+        totalPayables += transaction.outstandingAmount;
+      }
+    }
+
+    return {
+      'totalInterestEarned': totalInterestEarned,
+      'totalInterestPaid': totalInterestPaid,
+      'totalReceivables': totalReceivables,
+      'totalPayables': totalPayables,
+    };
+  }
+}
