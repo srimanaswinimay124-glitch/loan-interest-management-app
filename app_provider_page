@@ -1,0 +1,143 @@
+import 'package:flutter/foundation.dart';
+import '../models/contact.dart';
+import '../models/transaction.dart';
+import '../models/payment.dart';
+import '../services/database_service.dart';
+
+class AppProvider with ChangeNotifier {
+  final DatabaseService _databaseService = DatabaseService();
+  
+  List<Contact> _contacts = [];
+  List<Transaction> _transactions = [];
+  Map<String, double> _analytics = {};
+  
+  bool _isLoading = false;
+
+  List<Contact> get contacts => _contacts;
+  List<Transaction> get transactions => _transactions;
+  Map<String, double> get analytics => _analytics;
+  bool get isLoading => _isLoading;
+
+  Future<void> loadData() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _contacts = await _databaseService.getContacts();
+      _transactions = await _databaseService.getTransactions();
+      _analytics = await _databaseService.getAnalytics();
+    } catch (e) {
+      debugPrint('Error loading data: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addContact(Contact contact) async {
+    try {
+      final id = await _databaseService.insertContact(contact);
+      final newContact = contact.copyWith(id: id);
+      _contacts.add(newContact);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error adding contact: $e');
+    }
+  }
+
+  Future<void> updateContact(Contact contact) async {
+    try {
+      await _databaseService.updateContact(contact);
+      final index = _contacts.indexWhere((c) => c.id == contact.id);
+      if (index != -1) {
+        _contacts[index] = contact;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error updating contact: $e');
+    }
+  }
+
+  Future<void> deleteContact(int id) async {
+    try {
+      await _databaseService.deleteContact(id);
+      _contacts.removeWhere((c) => c.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error deleting contact: $e');
+    }
+  }
+
+  Future<void> addTransaction(Transaction transaction) async {
+    try {
+      final id = await _databaseService.insertTransaction(transaction);
+      final newTransaction = transaction.copyWith(id: id);
+      _transactions.add(newTransaction);
+      _analytics = await _databaseService.getAnalytics();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error adding transaction: $e');
+    }
+  }
+
+  Future<void> updateTransaction(Transaction transaction) async {
+    try {
+      await _databaseService.updateTransaction(transaction);
+      final index = _transactions.indexWhere((t) => t.id == transaction.id);
+      if (index != -1) {
+        _transactions[index] = transaction;
+        _analytics = await _databaseService.getAnalytics();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error updating transaction: $e');
+    }
+  }
+
+  Future<void> addPayment(Payment payment, int transactionId) async {
+    try {
+      await _databaseService.insertPayment(payment);
+      
+      // Update transaction paid amount and status
+      final transaction = _transactions.firstWhere((t) => t.id == transactionId);
+      final totalPaid = payment.amount + transaction.paidAmount;
+      final updatedTransaction = transaction.copyWith(
+        paidAmount: totalPaid,
+        status: totalPaid >= transaction.totalAmount 
+            ? PaymentStatus.fullyPaid 
+            : PaymentStatus.partiallyPaid,
+        updatedAt: DateTime.now(),
+      );
+      
+      await updateTransaction(updatedTransaction);
+    } catch (e) {
+      debugPrint('Error adding payment: $e');
+    }
+  }
+
+  List<Transaction> getTransactionsByType(TransactionType type) {
+    return _transactions.where((t) => t.type == type).toList();
+  }
+
+  List<Transaction> getPendingTransactions() {
+    return _transactions.where((t) => t.status == PaymentStatus.pending).toList();
+  }
+
+  List<Transaction> getOverdueTransactions() {
+    final now = DateTime.now();
+    return _transactions.where((t) => 
+      t.dueDate != null && 
+      t.dueDate!.isBefore(now) && 
+      t.status != PaymentStatus.fullyPaid
+    ).toList();
+  }
+
+  Contact? getContactById(int id) {
+    try {
+      return _contacts.firstWhere((c) => c.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+}
+``_
