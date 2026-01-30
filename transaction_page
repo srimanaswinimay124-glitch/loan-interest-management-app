@@ -1,0 +1,118 @@
+enum TransactionType { given, taken }
+enum InterestType { monthly, yearly }
+enum PaymentStatus { pending, partiallyPaid, fullyPaid }
+
+class Transaction {
+  final int? id;
+  final int contactId;
+  final double amount;
+  final TransactionType type;
+  final double interestRate;
+  final InterestType interestType;
+  final DateTime startDate;
+  final DateTime? dueDate;
+  final String? notes;
+  final PaymentStatus status;
+  final double paidAmount;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  Transaction({
+    this.id,
+    required this.contactId,
+    required this.amount,
+    required this.type,
+    required this.interestRate,
+    required this.interestType,
+    required this.startDate,
+    this.dueDate,
+    this.notes,
+    this.status = PaymentStatus.pending,
+    this.paidAmount = 0.0,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'contactId': contactId,
+      'amount': amount,
+      'type': type.index,
+      'interestRate': interestRate,
+      'interestType': interestType.index,
+      'startDate': startDate.toIso8601String(),
+      'dueDate': dueDate?.toIso8601String(),
+      'notes': notes,
+      'status': status.index,
+      'paidAmount': paidAmount,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory Transaction.fromMap(Map<String, dynamic> map) {
+    return Transaction(
+      id: map['id']?.toInt(),
+      contactId: map['contactId']?.toInt() ?? 0,
+      amount: map['amount']?.toDouble() ?? 0.0,
+      type: TransactionType.values[map['type'] ?? 0],
+      interestRate: map['interestRate']?.toDouble() ?? 0.0,
+      interestType: InterestType.values[map['interestType'] ?? 0],
+      startDate: DateTime.parse(map['startDate']),
+      dueDate: map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null,
+      notes: map['notes'],
+      status: PaymentStatus.values[map['status'] ?? 0],
+      paidAmount: map['paidAmount']?.toDouble() ?? 0.0,
+      createdAt: DateTime.parse(map['createdAt']),
+      updatedAt: DateTime.parse(map['updatedAt']),
+    );
+  }
+
+  // Interest calculation methods
+  double calculateSimpleInterest({DateTime? tillDate}) {
+    final endDate = tillDate ?? DateTime.now();
+    final days = endDate.difference(startDate).inDays;
+    
+    if (interestType == InterestType.yearly) {
+      return (amount * interestRate * days) / (100 * 365);
+    } else {
+      return (amount * interestRate * days) / (100 * 30);
+    }
+  }
+
+  double get totalAmount => amount + calculateSimpleInterest();
+  double get outstandingAmount => totalAmount - paidAmount;
+
+  Transaction copyWith({
+    int? id,
+    int? contactId,
+    double? amount,
+    TransactionType? type,
+    double? interestRate,
+    InterestType? interestType,
+    DateTime? startDate,
+    DateTime? dueDate,
+    String? notes,
+    PaymentStatus? status,
+    double? paidAmount,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Transaction(
+      id: id ?? this.id,
+      contactId: contactId ?? this.contactId,
+      amount: amount ?? this.amount,
+      type: type ?? this.type,
+      interestRate: interestRate ?? this.interestRate,
+      interestType: interestType ?? this.interestType,
+      startDate: startDate ?? this.startDate,
+      dueDate: dueDate ?? this.dueDate,
+      notes: notes ?? this.notes,
+      status: status ?? this.status,
+      paidAmount: paidAmount ?? this.paidAmount,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
