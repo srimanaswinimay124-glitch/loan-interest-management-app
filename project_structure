@@ -1,0 +1,11 @@
+smart_interest_x/
+├── lib/
+│   ├── main.dart
+│   ├── models/
+│   ├── services/
+│   ├── screens/
+│   ├── widgets/
+│   ├── providers/
+│   └── utils/
+├── pubspec.yaml
+└── assets/
